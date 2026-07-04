@@ -72,20 +72,20 @@ const AuthPage = () => {
         {/* Dot grid bg */}
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '20px 20px', pointerEvents: 'none' }} />
 
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 420 }}>
-          <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', marginBottom: '3rem' }}>
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 420 }} className="animate-pageIn">
+          <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', marginBottom: '3rem' }} className="animate-pageIn delay-75">
             <WasteGridLogo size={26} color="var(--primary)" />
             <span style={{ fontSize: '1.15rem', fontWeight: 800, color: 'white' }}>WasteGrid</span>
           </div>
 
-          <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'white', lineHeight: 1.2, marginBottom: '1rem' }}>
+          <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'white', lineHeight: 1.2, marginBottom: '1rem' }} className="animate-pageIn delay-100">
             Smart waste collection starts here.
           </h1>
-          <p style={{ color: 'var(--text-on-dark-muted)', fontSize: '1rem', lineHeight: 1.7, marginBottom: '2.5rem' }}>
+          <p style={{ color: 'var(--text-on-dark-muted)', fontSize: '1rem', lineHeight: 1.7, marginBottom: '2.5rem' }} className="animate-pageIn delay-150">
             One platform for municipalities, drivers, and citizens to streamline waste operations.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }} className="animate-pageIn delay-200">
             {[
               { icon: <Shield size={18} />, text: 'Real-time bin monitoring & analytics' },
               { icon: <Truck size={18} />,  text: 'AI-optimized collection routes' },
@@ -104,7 +104,7 @@ const AuthPage = () => {
 
       {/* Right: Form */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', background: 'var(--bg-secondary)' }}>
-        <div style={{ width: '100%', maxWidth: '420px' }}>
+        <div style={{ width: '100%', maxWidth: '420px' }} className="animate-scaleIn">
 
           <div style={{ marginBottom: '2rem' }}>
             <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.35rem' }}>
@@ -139,7 +139,7 @@ const AuthPage = () => {
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             {!isLogin && (
-              <div className="form-group" style={{ marginBottom: 0 }}>
+              <div className="form-group animate-tabSwitch" style={{ marginBottom: 0 }}>
                 <label className="form-label">Full Name</label>
                 <div className="input-wrapper">
                   <span className="input-icon-left"><User size={16} /></span>
@@ -168,7 +168,7 @@ const AuthPage = () => {
             </div>
 
             {!isLogin && (
-              <>
+              <div className="animate-tabSwitch" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Role</label>
                   <select className="form-select" value={role} onChange={e => setRole(e.target.value)}>
@@ -179,7 +179,7 @@ const AuthPage = () => {
                 </div>
 
                 {role === 'driver' && (
-                  <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div className="form-group animate-tabSwitch" style={{ marginBottom: 0 }}>
                     <label className="form-label">Vehicle Number</label>
                     <div className="input-wrapper">
                       <span className="input-icon-left"><Truck size={16} /></span>
@@ -194,7 +194,7 @@ const AuthPage = () => {
                     </div>
                   </div>
                 )}
-              </>
+              </div>
             )}
 
             <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', padding: '0.7rem', marginTop: '0.5rem' }}>

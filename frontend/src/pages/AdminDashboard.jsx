@@ -245,7 +245,7 @@ const AdminDashboard = () => {
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
-    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="page-wrapper animate-pageIn" style={{ display: 'flex', flexDirection: 'column' }}>
 
       {/* Sub-header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', background: 'white' }}>
@@ -287,7 +287,7 @@ const AdminDashboard = () => {
 
           {/* ── TAB: OVERVIEW ── */}
           {activeTab === 'overview' && (
-            <>
+            <div className="animate-tabSwitch" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
               {/* Stat cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.85rem' }}>
                 <StatCard icon={<Trash2 />}        label="Total Bins"      value={analytics?.summary.totalBins ?? '—'}  accentColor="var(--primary)"   loading={!analytics} />
@@ -472,12 +472,12 @@ const AdminDashboard = () => {
                   ) : <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', justifyContent: 'center' }}>{[1,2,3].map(i=><Skeleton key={i} h={8} />)}</div>}
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* ── TAB: BINS ── */}
           {activeTab === 'bins' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+            <div className="animate-tabSwitch" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
               {/* Controls row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <div className="search-input-wrap">
@@ -562,7 +562,7 @@ const AdminDashboard = () => {
 
           {/* ── TAB: FLEET ── */}
           {activeTab === 'fleet' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+            <div className="animate-tabSwitch" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--navy)' }}>Fleet — {vehicles.length} vehicles</h3>
                 <button onClick={() => setShowVehicleForm(v => !v)} className="btn btn-primary btn-sm">
@@ -636,7 +636,7 @@ const AdminDashboard = () => {
 
           {/* ── TAB: ROUTES ── */}
           {activeTab === 'routes' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+            <div className="animate-tabSwitch" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
               <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--navy)' }}>Active Route Dispatches</h3>
               {routes.length === 0 ? (
                 <div className="empty-state">
@@ -687,7 +687,7 @@ const AdminDashboard = () => {
 
           {/* ── TAB: REPORTS ── */}
           {activeTab === 'reports' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+            <div className="animate-tabSwitch" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ fontSize: '0.95rem', fontWeight: 800 }}>Citizen Overflow Reports</h3>
                 <span className="badge badge-danger">{reports.filter(r => r.status === 'Pending').length} Action Required</span>

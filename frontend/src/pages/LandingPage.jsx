@@ -73,17 +73,17 @@ const LandingPage = () => {
         <div className="container-lg" style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '4rem', alignItems: 'center' }}>
           
           {/* Hero Left Content */}
-          <div style={{ maxWidth: '640px' }}>
-            <span className="eyebrow" style={{ display: 'inline-block', marginBottom: '1.25rem' }}>
+          <div style={{ maxWidth: '640px' }} className="animate-pageIn">
+            <span className="eyebrow animate-pageIn delay-100" style={{ display: 'inline-block', marginBottom: '1.25rem' }}>
               Smart Waste Management & Logistics
             </span>
-            <h1 style={{ fontSize: 'clamp(2.25rem, 5vw, 3.5rem)', color: 'var(--navy)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: '1.5rem' }}>
+            <h1 className="animate-pageIn delay-150" style={{ fontSize: 'clamp(2.25rem, 5vw, 3.5rem)', color: 'var(--navy)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: '1.5rem' }}>
               The operating system for modern waste collection
             </h1>
-            <p style={{ fontSize: '1.15rem', color: 'var(--text-secondary)', lineHeight: 1.65, marginBottom: '2.5rem' }}>
+            <p className="animate-pageIn delay-200" style={{ fontSize: '1.15rem', color: 'var(--text-secondary)', lineHeight: 1.65, marginBottom: '2.5rem' }}>
               Municipal authorities and waste management agencies run their entire operation on one platform — citizen reporting, route optimization, vehicle tracking, and analytics in a single unified data model.
             </p>
-            <div style={{ display: 'flex', gap: '1rem' }}>
+            <div className="animate-pageIn delay-300" style={{ display: 'flex', gap: '1rem' }}>
               <button onClick={() => navigate('/login', { state: { isLogin: true } })} className="btn btn-primary btn-lg" style={{ background: 'var(--primary)', padding: '0.85rem 2rem' }}>
                 Explore platform
               </button>
@@ -93,7 +93,7 @@ const LandingPage = () => {
             </div>
 
             {/* Logo Row: Swapped generic text with styled WasteGrid partners */}
-            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '4rem', flexWrap: 'wrap' }}>
+            <div className="animate-pageIn delay-400" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '4rem', flexWrap: 'wrap' }}>
               {[
                 { name: 'Chandigarh MC', icon: <Building2 size={14} /> },
                 { name: 'Urban SmartGrid', icon: <Layers size={14} /> },
@@ -112,21 +112,27 @@ const LandingPage = () => {
           <div style={{ position: 'relative', height: '420px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             
             {/* 💻 Laptop Mockup behind */}
-            <div style={{
-              width: '490px',
-              height: '330px',
-              background: 'white',
-              border: '1px solid var(--border-color)',
-              borderRadius: '12px',
-              boxShadow: 'var(--shadow-xl)',
-              position: 'absolute',
-              right: '20px',
-              top: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              zIndex: 1,
-            }}>
+            <div 
+              className="animate-cardReveal delay-200"
+              style={{
+                width: '490px',
+                height: '330px',
+                background: 'white',
+                border: '1px solid var(--border-color)',
+                borderRadius: '12px',
+                boxShadow: 'var(--shadow-xl)',
+                position: 'absolute',
+                right: '20px',
+                top: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                zIndex: 1,
+                transition: 'var(--transition-bounce)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-6px) scale(1.025)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
+            >
               {/* Fake Chrome Top Bar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.75rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
@@ -185,21 +191,27 @@ const LandingPage = () => {
             </div>
 
             {/* 📱 Mobile Phone Mockup in front overlapping left side of laptop */}
-            <div style={{
-              width: '180px',
-              height: '350px',
-              background: 'white',
-              border: '6px solid var(--navy)',
-              borderRadius: '24px',
-              boxShadow: 'var(--shadow-xl)',
-              position: 'absolute',
-              left: '10px',
-              bottom: '-20px',
-              zIndex: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}>
+            <div 
+              className="animate-cardReveal delay-400"
+              style={{
+                width: '180px',
+                height: '350px',
+                background: 'white',
+                border: '6px solid var(--navy)',
+                borderRadius: '24px',
+                boxShadow: 'var(--shadow-xl)',
+                position: 'absolute',
+                left: '10px',
+                bottom: '-20px',
+                zIndex: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                transition: 'var(--transition-bounce)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.03) rotate(-2deg)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
+            >
               {/* Phone Speaker/Camera notch */}
               <div style={{ background: 'var(--navy)', height: '14px', width: '90px', alignSelf: 'center', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }} />
               
@@ -390,7 +402,32 @@ const LandingPage = () => {
               { title: 'Improve', icon: <BarChart3 size={22} color="var(--secondary)" />, desc: 'Operations efficiency. Nearest-neighbor pathfinding optimizes collector routes. Fuel usage drops while neighborhood cleanliness levels spike.' },
               { title: 'Unify', icon: <Layers size={22} color="var(--accent)" />, desc: 'The entire waste value chain on one data model. One platform replacing five to seven systems. One source of truth for citizens, containers, vehicles, drivers, routes, and invoices.' },
             ].map((p, idx) => (
-              <div key={idx} style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+              <div 
+                key={idx} 
+                className={`animate-cardReveal delay-${(idx + 1) * 150}`}
+                style={{ 
+                  background: 'white', 
+                  border: '1px solid var(--border-color)', 
+                  borderRadius: '16px', 
+                  padding: '2rem', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  textAlign: 'center', 
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'var(--transition-bounce)',
+                }}
+                onMouseEnter={(e) => { 
+                  e.currentTarget.style.transform = 'translateY(-6px) scale(1.015)'; 
+                  e.currentTarget.style.boxShadow = 'var(--shadow-md)'; 
+                  e.currentTarget.style.borderColor = 'var(--primary-light)';
+                }}
+                onMouseLeave={(e) => { 
+                  e.currentTarget.style.transform = 'none'; 
+                  e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; 
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                }}
+              >
                 <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.25rem' }}>
                   {p.icon}
                 </div>
@@ -426,7 +463,32 @@ const LandingPage = () => {
               { title: 'B2B Analytics Panel', icon: <BarChart3 size={20} color="var(--primary)" />, desc: 'Generates reports on fleet fuel consumption, pickup success rates, payload distributions, and sector performance.' },
               { title: 'Municipal Invoicing', icon: <CreditCard size={20} color="var(--primary)" />, desc: 'Automates contract billing and invoice scheduling based on verified collection logs and dumpster weight payloads.' },
             ].map((f, idx) => (
-              <div key={idx} style={{ padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div 
+                key={idx} 
+                className={`animate-cardReveal delay-${(idx + 1) * 75}`}
+                style={{ 
+                  padding: '1.5rem', 
+                  background: 'var(--bg-secondary)', 
+                  borderRadius: '12px', 
+                  border: '1px solid var(--border-color)', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'flex-start',
+                  transition: 'var(--transition-bounce)',
+                }}
+                onMouseEnter={(e) => { 
+                  e.currentTarget.style.transform = 'translateY(-4px)'; 
+                  e.currentTarget.style.boxShadow = 'var(--shadow-md)'; 
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                  e.currentTarget.style.background = 'white';
+                }}
+                onMouseLeave={(e) => { 
+                  e.currentTarget.style.transform = 'none'; 
+                  e.currentTarget.style.boxShadow = 'none'; 
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                  e.currentTarget.style.background = 'var(--bg-secondary)';
+                }}
+              >
                 <div style={{ width: 36, height: 36, borderRadius: '8px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', boxShadow: 'var(--shadow-xs)', color: 'var(--primary)' }}>
                   {f.icon}
                 </div>

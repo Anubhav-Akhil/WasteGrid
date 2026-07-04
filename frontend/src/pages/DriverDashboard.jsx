@@ -98,7 +98,7 @@ const DriverDashboard = () => {
   };
 
   return (
-    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="page-wrapper animate-pageIn" style={{ display: 'flex', flexDirection: 'column' }}>
 
       {/* Sub-header */}
       <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', background: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -207,6 +207,7 @@ const DriverDashboard = () => {
                   return (
                     <div
                       key={wp._id || idx}
+                      className={`animate-cardReveal delay-${Math.min(idx * 75, 450)}`}
                       style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)',
@@ -214,6 +215,19 @@ const DriverDashboard = () => {
                         borderLeft: `4px solid ${wp.collected ? 'var(--primary)' : 'var(--warning)'}`,
                         background: wp.collected ? 'var(--primary-50)' : 'white',
                         opacity: wp.collected ? 0.75 : 1,
+                        transition: 'var(--transition-bounce)',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!wp.collected) {
+                          e.currentTarget.style.transform = 'translateX(4px)';
+                          e.currentTarget.style.borderColor = 'var(--primary)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!wp.collected) {
+                          e.currentTarget.style.transform = 'none';
+                          e.currentTarget.style.borderColor = 'var(--border-color)';
+                        }
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

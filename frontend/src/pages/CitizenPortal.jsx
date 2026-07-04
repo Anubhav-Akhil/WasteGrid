@@ -16,7 +16,7 @@ const WASTE_LEVELS = [
 ];
 
 // ── Recent report card ────────────────────────────────────────────────────────
-const ReportCard = ({ rep }) => {
+const ReportCard = ({ rep, index }) => {
   const dt = new Date(rep.createdAt);
   const ago = (() => {
     const diff = (Date.now() - dt.getTime()) / 1000;
@@ -33,16 +33,27 @@ const ReportCard = ({ rep }) => {
   }[rep.status] || { bg: '#e2e8f0', color: '#475569', border: '#cbd5e1' };
 
   return (
-    <div style={{ 
-      padding: '0.85rem 1rem', 
-      background: 'white', 
-      border: '1px solid var(--border-color)', 
-      borderLeft: `4px solid ${rep.status === 'Resolved' ? 'var(--primary)' : rep.status === 'Dispatched' ? 'var(--warning)' : 'var(--danger)'}`, 
-      borderRadius: '8px',
-      boxShadow: 'var(--shadow-xs)',
-      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-      cursor: 'default'
-    }} className="hover-lift">
+    <div 
+      className={`animate-cardReveal delay-${Math.min(index * 75, 450)}`}
+      style={{ 
+        padding: '0.85rem 1rem', 
+        background: 'white', 
+        border: '1px solid var(--border-color)', 
+        borderLeft: `4px solid ${rep.status === 'Resolved' ? 'var(--primary)' : rep.status === 'Dispatched' ? 'var(--warning)' : 'var(--danger)'}`, 
+        borderRadius: '8px',
+        boxShadow: 'var(--shadow-xs)',
+        transition: 'var(--transition-bounce)',
+        cursor: 'default'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'none';
+        e.currentTarget.style.boxShadow = 'var(--shadow-xs)';
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--navy)' }} className="truncate">
@@ -178,7 +189,7 @@ const CitizenPortal = () => {
   const selectedLocation = latitude && longitude ? { latitude, longitude } : null;
 
   return (
-    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="page-wrapper animate-pageIn" style={{ display: 'flex', flexDirection: 'column' }}>
 
       {/* Premium Hero Banner - Deep Tech Dark Navy Theme */}
       <div style={{ 
@@ -331,25 +342,28 @@ const CitizenPortal = () => {
         <div style={{ gridColumn: 'span 5', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
           {/* ── Report form ── */}
-          <div className="card" style={{ padding: '1.75rem', flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-md)', borderRadius: 'var(--radius-lg)' }}>
+          <div className="card animate-cardReveal delay-150" style={{ padding: '1.75rem', flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-md)', borderRadius: 'var(--radius-lg)' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, color: 'var(--navy)' }}>
               <AlertTriangle size={20} color="var(--warning)" /> Report Overflowing Waste
             </h3>
             
             {!user ? (
-              <div style={{ 
-                flex: 1, 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                textAlign: 'center', 
-                padding: '2.5rem 1rem', 
-                background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-                borderRadius: '12px',
-                border: '1px dashed #cbd5e1',
-                gap: '1rem'
-              }}>
+              <div 
+                className="animate-scaleIn"
+                style={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  textAlign: 'center', 
+                  padding: '2.5rem 1rem', 
+                  background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+                  borderRadius: '12px',
+                  border: '1px dashed #cbd5e1',
+                  gap: '1rem'
+                }}
+              >
                 <div style={{ 
                   width: 50, 
                   height: 50, 
@@ -530,7 +544,7 @@ const CitizenPortal = () => {
               <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>No public reports recorded yet.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: 240, overflowY: 'auto' }}>
-                {visibleReports.map(r => <ReportCard key={r._id} rep={r} />)}
+                {visibleReports.map((r, idx) => <ReportCard key={r._id} rep={r} index={idx} />)}
               </div>
             )}
           </div>
