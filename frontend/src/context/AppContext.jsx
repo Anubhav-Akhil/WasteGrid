@@ -23,7 +23,7 @@ export const AppProvider = ({ children }) => {
   });
 
   const socketRef = useRef(null);
-  const API_BASE = 'http://localhost:5000/api';
+  const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api';
 
   // Helper for authenticated headers
   const getAuthHeaders = () => {
@@ -37,7 +37,7 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     try {
       // Connect to Socket.io server
-      socketRef.current = io('http://localhost:5000', {
+      socketRef.current = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,

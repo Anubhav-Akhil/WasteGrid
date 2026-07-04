@@ -94,7 +94,8 @@ const AdminDashboard = () => {
   // Fetch drivers list for fleet tab
   useEffect(() => {
     if (!user || activeTab !== 'fleet') return;
-    fetch('http://localhost:5000/api/auth/drivers', {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    fetch(`${API_URL}/api/auth/drivers`, {
       headers: { Authorization: `Bearer ${user.token}` },
     })
       .then(r => r.ok ? r.json() : [])
