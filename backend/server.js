@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import mongoose from 'mongoose';
 
 // Route Imports
 import authRoutes from './routes/authRoutes.js';
@@ -45,6 +46,28 @@ app.use('/api/bins', binRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/reports', reportRoutes);
+
+app.get('/api/db-status', (req, res) => {
+  const state = mongoose.connection.readyState;
+  const states = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting',
+  };
+  
+  let maskedUri = 'not-defined';
+  if (process.env.MONGO_URI) {
+    maskedUri = process.env.MONGO_URI.replace(/:([^@]+)@/, ':****@');
+  }
+
+  res.json({
+    status: states[state] || 'unknown',
+    readyState: state,
+    hasMongoUri: !!process.env.MONGO_URI,
+    maskedUri: maskedUri,
+  });
+});
 
 app.get('/', (req, res) => {
   res.send('Smart Waste Collection & Route Optimization API is running...');
