@@ -1,4 +1,4 @@
-# ♻️ Smart Waste Management Portal
+# ♻️WasteGrid - Smart Waste Management Portal
 
 [![MERN Stack](https://img.shields.io/badge/Stack-MERN-green.svg?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
 [![React 19](https://img.shields.io/badge/Frontend-React%2019-blue.svg?style=for-the-badge&logo=react)](https://react.dev/)

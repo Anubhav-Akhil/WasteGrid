@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { getBackendUrl } from '../config';
 import { useToast } from '../components/Toast';
 import InteractiveMap from '../components/InteractiveMap';
 import {
@@ -94,7 +95,7 @@ const AdminDashboard = () => {
   // Fetch drivers list for fleet tab
   useEffect(() => {
     if (!user || activeTab !== 'fleet') return;
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const API_URL = getBackendUrl();
     fetch(`${API_URL}/api/auth/drivers`, {
       headers: { Authorization: `Bearer ${user.token}` },
     })
