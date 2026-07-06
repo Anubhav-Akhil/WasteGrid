@@ -14,9 +14,16 @@ const routeSchema = new mongoose.Schema({
   vehicle: { type: mongoose.Schema.Types.ObjectId, ref: 'Vehicle', required: true },
   driver: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   waypoints: [waypointSchema],
+  geometry: { type: [Array], default: [] }, // Array of [lat, lng] coordinates representing the pickup road geometry
+  dumpGeometry: { type: [Array], default: [] }, // Array of [lat, lng] coordinates from last pickup to dump yard
+  dumpYard: {
+    latitude: { type: Number, default: 0 },
+    longitude: { type: Number, default: 0 },
+    name: { type: String, default: 'Municipal Dump Yard' }
+  },
   status: { 
     type: String, 
-    enum: ['Pending', 'In Progress', 'Completed'], 
+    enum: ['Pending', 'In Progress', 'Dumping', 'Completed'], 
     default: 'Pending' 
   },
   distance: { type: Number, default: 0 }, // in km

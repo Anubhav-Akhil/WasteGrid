@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../components/Toast';
 import InteractiveMap from '../components/InteractiveMap';
 import {
   Send, MapPin, AlertTriangle, ArrowRight, Shield,
@@ -95,9 +96,10 @@ const ReportCard = ({ rep, index }) => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 const CitizenPortal = () => {
-  const { bins, reports, vehicles, submitReport } = useApp();
+  const { bins, reports, vehicles, submitReport, notifications, clearNotification } = useApp();
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [reportedBy, setReportedBy] = useState('');
   const [locationName, setLocationName] = useState('');
@@ -111,6 +113,17 @@ const CitizenPortal = () => {
   const [errors, setErrors] = useState({});
   const [reportSearch, setReportSearch] = useState('');
   const [instantLoginLoading, setInstantLoginLoading] = useState(false);
+
+  // Listen for citizen notifications
+  useEffect(() => {
+    const citizenNotes = notifications.filter(n => n.target === 'citizen');
+    if (citizenNotes.length > 0) {
+      citizenNotes.forEach(n => {
+        toast.success(n.message, n.title || 'Notification');
+        clearNotification(n.id);
+      });
+    }
+  }, [notifications, clearNotification, toast]);
 
   // Instant login helper for demo flow
   const handleInstantDemoLogin = async () => {
@@ -133,6 +146,12 @@ const CitizenPortal = () => {
     }
     setLatitude(parseFloat(coords.lat.toFixed(6)));
     setLongitude(parseFloat(coords.lng.toFixed(6)));
+    setErrors(prev => ({ ...prev, coords: null }));
+  };
+
+  const handleClearLocation = () => {
+    setLatitude(null);
+    setLongitude(null);
     setErrors(prev => ({ ...prev, coords: null }));
   };
 
@@ -320,15 +339,44 @@ const CitizenPortal = () => {
           </div>
           
           <div style={{ flex: 1, position: 'relative' }}>
-            <InteractiveMap bins={bins} vehicles={vehicles} reports={reports} onMapClick={handleMapClick} selectedLocation={selectedLocation} />
+            <InteractiveMap bins={bins} vehicles={vehicles} reports={reports} onMapClick={handleMapClick} selectedLocation={selectedLocation} onClearLocation={handleClearLocation} />
           </div>
           
           {/* GPS capture bar */}
           {selectedLocation && (
-            <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid var(--border-color)', background: 'var(--primary-50)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem' }}>
-              <CheckCircle2 size={16} color="var(--primary)" />
-              <span style={{ color: 'var(--primary-hover)', fontWeight: 700 }}>Location pinned:</span>
-              <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontWeight: 600 }}>{latitude.toFixed(6)}, {longitude.toFixed(6)}</span>
+            <div style={{ 
+              padding: '0.85rem 1.25rem', 
+              borderTop: '1px solid var(--border-color)', 
+              background: 'var(--primary-50)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              gap: '0.5rem', 
+              fontSize: '0.82rem' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <CheckCircle2 size={16} color="var(--primary)" />
+                <span style={{ color: 'var(--primary-hover)', fontWeight: 700 }}>Location pinned:</span>
+                <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontWeight: 600 }}>{latitude.toFixed(6)}, {longitude.toFixed(6)}</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={handleClearLocation} 
+                className="btn btn-secondary btn-sm" 
+                style={{ 
+                  padding: '4px 10px', 
+                  fontSize: '0.72rem', 
+                  border: '1px solid rgba(239, 68, 68, 0.2)', 
+                  background: 'white',
+                  color: 'var(--danger)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  lineHeight: '1.2'
+                }}
+              >
+                Remove Marker
+              </button>
             </div>
           )}
           {errors.coords && (

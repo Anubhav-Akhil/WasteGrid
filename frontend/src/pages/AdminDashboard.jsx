@@ -75,8 +75,19 @@ const AdminDashboard = () => {
     bins, vehicles, routes, reports, analytics, loading,
     fetchBins, fetchVehicles, fetchRoutes, fetchReports, fetchAnalytics,
     createBin, deleteBin, updateBin, createVehicle, deleteVehicle,
-    optimizeRoute, resolveReport,
+    optimizeRoute, resolveReport, notifications, clearNotification,
   } = useApp();
+
+  // Listen for admin notifications
+  useEffect(() => {
+    const adminNotes = notifications.filter(n => n.target === 'admin');
+    if (adminNotes.length > 0) {
+      adminNotes.forEach(n => {
+        toast.success(n.message, n.title || 'Notification');
+        clearNotification(n.id);
+      });
+    }
+  }, [notifications, clearNotification, toast]);
 
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedVehicle, setSelectedVehicle] = useState('');
@@ -105,15 +116,85 @@ const AdminDashboard = () => {
   }, [user, activeTab, vehicles]);
 
   // Active route for map display
-  const activeRoute = useMemo(
-    () => activeRouteView || routes.find(r => r.status === 'In Progress') || null,
-    [routes, activeRouteView]
+  const activeRoute = useMemo(() => {
+    if (activeRouteView) {
+      const updated = routes.find(r => r._id === activeRouteView._id);
+      return updated || activeRouteView;
+    }
+    return routes.find(r => r.status === 'In Progress') || null;
+  }, [routes, activeRouteView]);
+
+  const fullBins = useMemo(
+    () => bins.filter(b => b.fillLevel >= 75 || b.status === 'Overflowing'),
+    [bins]
   );
+
+  const computeDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) *
+        Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const estimateRouteDistance = (vehicle, binsToVisit) => {
+    const unvisited = [...binsToVisit];
+    let currentLat = vehicle.latitude;
+    let currentLng = vehicle.longitude;
+    let totalDistance = 0;
+
+    while (unvisited.length > 0) {
+      let nearestIndex = 0;
+      let minDistance = Infinity;
+      for (let i = 0; i < unvisited.length; i++) {
+        const bin = unvisited[i];
+        const distance = computeDistance(currentLat, currentLng, bin.latitude, bin.longitude);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestIndex = i;
+        }
+      }
+      totalDistance += minDistance;
+      currentLat = unvisited[nearestIndex].latitude;
+      currentLng = unvisited[nearestIndex].longitude;
+      unvisited.splice(nearestIndex, 1);
+    }
+
+    return Math.round(totalDistance * 10) / 10;
+  };
+
+  const recommendedVehicle = useMemo(() => {
+    const idleVehicles = vehicles.filter(v => v.status === 'Idle' && v.driver && v.latitude && v.longitude);
+    if (idleVehicles.length === 0 || fullBins.length === 0) return null;
+
+    let bestVehicle = null;
+    let bestDistance = Infinity;
+
+    for (const vehicle of idleVehicles) {
+      const distance = estimateRouteDistance(vehicle, fullBins);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestVehicle = { ...vehicle, estimatedRouteDistance: distance };
+      }
+    }
+
+    return bestVehicle;
+  }, [vehicles, fullBins]);
+
+  useEffect(() => {
+    if (recommendedVehicle && !selectedVehicle) {
+      setSelectedVehicle(recommendedVehicle._id);
+    }
+  }, [recommendedVehicle, selectedVehicle]);
 
   const criticalBins = useMemo(() => bins.filter(b => b.fillLevel >= 75).slice(0, 4), [bins]);
   const pendingReports = useMemo(() => reports.filter(r => r.status === 'Pending').slice(0, 4), [reports]);
   const activeVehicles = useMemo(() => vehicles.filter(v => v.status === 'Active'), [vehicles]);
-  const recommendedVehicle = useMemo(() => activeVehicles[0] || vehicles[0] || null, [activeVehicles, vehicles]);
   const systemHealthScore = useMemo(() => {
     const criticalCount = criticalBins.length;
     const pendingCount = pendingReports.length;
@@ -318,7 +399,11 @@ const AdminDashboard = () => {
                     <Zap size={16} color="var(--accent)" />
                   </div>
                   <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    {recommendedVehicle ? `Best-fit truck: ${recommendedVehicle.vehicleNumber}` : 'No active vehicles available.'}
+                    {recommendedVehicle ? (
+                      <>Best-fit truck: <strong>{recommendedVehicle.vehicleNumber}</strong> ({recommendedVehicle.driver?.name}) — estimated cleanup route <strong>{recommendedVehicle.estimatedRouteDistance.toFixed(1)} km</strong>.</>
+                    ) : (
+                      'No idle truck with an assigned driver is currently available.'
+                    )}
                   </div>
                   <div style={{ marginTop: '0.7rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('routes')}>Open Routes</button>
@@ -744,16 +829,40 @@ const AdminDashboard = () => {
               Dispatch an idle collector vehicle to calculate and trigger the optimized path covering all currently full bins.
             </p>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-              <Clock size={12} color="var(--text-muted)" />
-              {vehicles.filter(v => v.status === 'Idle' && v.driver).length} active drivers online and idle
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.75rem', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Clock size={12} color="var(--text-muted)" />
+                {vehicles.filter(v => v.status === 'Idle' && v.driver).length} active drivers online and idle
+              </div>
+              {recommendedVehicle && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedVehicle(recommendedVehicle._id)}
+                  className="btn btn-outline-secondary btn-xs"
+                  style={{ fontSize: '0.72rem', padding: '0.35rem 0.65rem' }}
+                >
+                  Use best truck
+                </button>
+              )}
             </div>
+
+            {recommendedVehicle ? (
+              <div style={{ marginBottom: '0.75rem', fontSize: '0.8rem', color: '#334155', lineHeight: 1.4, padding: '0.75rem 0.9rem', border: '1px solid #cbd5e1', borderRadius: '0.75rem', background: '#f8fafc' }}>
+                Recommended: <strong>{recommendedVehicle.vehicleNumber}</strong> ({recommendedVehicle.driver?.name}) — estimated cleanup route <strong>{recommendedVehicle.estimatedRouteDistance.toFixed(1)} km</strong>.
+              </div>
+            ) : (
+              <div style={{ marginBottom: '0.75rem', fontSize: '0.8rem', color: '#64748b' }}>
+                No idle truck with an assigned driver is currently available or there are no bins requiring collection.
+              </div>
+            )}
 
             <form onSubmit={handleOptimize} style={{ display: 'flex', gap: '0.5rem' }}>
               <select required className="form-select" style={{ flex: 1, fontSize: '0.8rem' }} value={selectedVehicle} onChange={e => setSelectedVehicle(e.target.value)}>
                 <option value="">Select available truck…</option>
                 {vehicles.filter(v => v.status === 'Idle' && v.driver).map(v => (
-                  <option key={v._id} value={v._id}>{v.vehicleNumber} ({v.driver?.name})</option>
+                  <option key={v._id} value={v._id}>
+                    {v.vehicleNumber} ({v.driver?.name}){recommendedVehicle?._id === v._id ? ' — recommended' : ''}
+                  </option>
                 ))}
               </select>
               <button type="submit" disabled={optimizing || !selectedVehicle} className="btn btn-primary btn-sm">

@@ -91,7 +91,27 @@ const seedDatabase = async () => {
         });
         console.log('Seeded missing Citizen Demo user.');
       }
-      console.log('Database already populated, skipping seed.');
+      
+      // Reset the default bins to their initial seeded fill levels on startup
+      console.log('Database already populated. Resetting default bins to initial seeded fill levels...');
+      const defaultBinsData = [
+        { binId: 'BIN-101', fillLevel: 85 },
+        { binId: 'BIN-102', fillLevel: 45 },
+        { binId: 'BIN-103', fillLevel: 92 },
+        { binId: 'BIN-104', fillLevel: 30 },
+        { binId: 'BIN-105', fillLevel: 80 },
+        { binId: 'BIN-106', fillLevel: 15 },
+        { binId: 'BIN-107', fillLevel: 96 },
+      ];
+      for (const binData of defaultBinsData) {
+        const bin = await Bin.findOne({ binId: binData.binId });
+        if (bin) {
+          bin.fillLevel = binData.fillLevel;
+          await bin.save();
+        }
+      }
+      
+      console.log('Database already populated, default bins reset, skipping seed.');
       return;
     }
 
@@ -228,32 +248,292 @@ const startWasteSimulation = () => {
   }, 30000); // 30 seconds
 };
 
-// Simulate vehicle movement (update location periodically)
+// ── Route-aware vehicle simulation ──────────────────────────────────────────
+// Instead of random movement, vehicles follow their assigned route sequentially.
+// Every tick the vehicle moves more quickly along the path.
+// When it arrives (<0.0006 deg ≈ 60m), the bin is auto-collected.
+// When all bins are done, the route completes and notifications fire.
 const startVehicleSimulation = () => {
   setInterval(async () => {
     try {
-      const vehicles = await Vehicle.find({ status: 'Active' }).populate('driver');
-      
-      for (const vehicle of vehicles) {
-        // Randomly move vehicle slightly (simulate GPS tracking)
-        const latOffset = (Math.random() - 0.5) * 0.005; // ~250m
-        const lngOffset = (Math.random() - 0.5) * 0.005;
-        
-        vehicle.latitude = Math.max(30.6, Math.min(30.9, vehicle.latitude + latOffset));
-        vehicle.longitude = Math.max(76.6, Math.min(76.9, vehicle.longitude + lngOffset));
-        
-        await vehicle.save();
+      // Only process vehicles that are Active (have a dispatched route)
+      const activeVehicles = await Vehicle.find({ status: 'Active' }).populate('driver');
+
+      for (const vehicle of activeVehicles) {
+        // Find the In-Progress or Pending route for this vehicle
+        const route = await Route.findOne({
+          vehicle: vehicle._id,
+        status: { $in: ['Pending', 'In Progress', 'Dumping'] }
+      });
+
+      if (!route) continue;
+
+      // Find the FIRST uncollected waypoint (preserves nearest-neighbor order)
+      const nextWp = route.waypoints.find(wp => !wp.collected);
+
+      if (!nextWp && route.status !== 'Dumping') {
+        // All pickups are collected. Transition to dump yard travel.
+        if (route.dumpGeometry && route.dumpGeometry.length > 0) {
+          route.status = 'Dumping';
+          route.dumpStartedAt = new Date();
+          await route.save();
+
+          // Emit updated route to all clients
+          const populatedRoute = await Route.findById(route._id)
+            .populate('vehicle')
+            .populate('driver');
+          io.emit('routes:updated', [populatedRoute]);
+          continue;
+        }
       }
-      
-      // Emit vehicle locations to all connected clients
-      if (vehicles.length > 0) {
-        const vehiclesPopulated = await Vehicle.find({ status: 'Active' }).populate('driver');
-        io.emit('vehicles:updated', vehiclesPopulated);
+
+        if (route.status === 'Dumping') {
+          const dumpPath = route.dumpGeometry || [];
+          if (dumpPath.length === 0) continue;
+
+          let closestIdx = 0;
+          let minGeomDist = Infinity;
+          for (let i = 0; i < dumpPath.length; i++) {
+            const pt = dumpPath[i];
+            const distSq = (vehicle.latitude - pt[0]) ** 2 + (vehicle.longitude - pt[1]) ** 2;
+            if (distSq < minGeomDist) {
+              minGeomDist = distSq;
+              closestIdx = i;
+            }
+          }
+
+          const target = dumpPath[dumpPath.length - 1];
+          const dx = target[0] - vehicle.latitude;
+          const dy = target[1] - vehicle.longitude;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const ARRIVAL_THRESHOLD = 0.0012;
+
+          if (distance > ARRIVAL_THRESHOLD) {
+            const nextStepIdx = Math.min(dumpPath.length - 1, closestIdx + 4);
+            const nextStepCoord = dumpPath[nextStepIdx];
+            vehicle.latitude = nextStepCoord[0];
+            vehicle.longitude = nextStepCoord[1];
+            await vehicle.save();
+            io.emit('vehicles:updated', [vehicle]);
+            continue;
+          }
+
+          // Arrived at dump yard.
+          vehicle.latitude = route.dumpYard.latitude;
+          vehicle.longitude = route.dumpYard.longitude;
+          vehicle.currentLoad = 0;
+          vehicle.fuelLevel = Math.max(10, vehicle.fuelLevel - 2);
+          vehicle.status = 'Idle';
+
+          // Randomly reposition slightly after dumping so the truck appears on a nearby road.
+          const randomOffset = () => (Math.random() - 0.5) * 0.015;
+          vehicle.latitude += randomOffset();
+          vehicle.longitude += randomOffset();
+          await vehicle.save();
+          io.emit('vehicles:updated', [vehicle]);
+
+          route.status = 'Completed';
+          route.completedAt = new Date();
+          await route.save();
+
+          io.emit('notification:admin', {
+            title: '🚛 Dump Yard Arrival',
+            message: `Vehicle ${vehicle.vehicleNumber} completed dumping at ${route.dumpYard.name}.`,
+            type: 'success',
+            timestamp: new Date().toISOString()
+          });
+
+          io.emit('notification:citizen', {
+            title: '✅ Waste Disposed',
+            message: `The cleanup route has been completed and garbage was safely dumped.`,
+            type: 'success',
+            timestamp: new Date().toISOString()
+          });
+
+          continue;
+        }
+
+        // Normal pickup movement
+        const dx = nextWp.latitude - vehicle.latitude;
+        const dy = nextWp.longitude - vehicle.longitude;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        const ARRIVAL_THRESHOLD = 0.0006; // ~60 meters
+
+        // Find the index of the last collected waypoint in geometry to prevent jumping backwards
+        let prevWpGeomIdx = 0;
+        const collectedWaypoints = route.waypoints.filter(wp => wp.collected);
+        if (collectedWaypoints.length > 0) {
+          const lastCollectedWp = collectedWaypoints[collectedWaypoints.length - 1];
+          let minPrevDist = Infinity;
+          for (let i = 0; i < route.geometry.length; i++) {
+            const pt = route.geometry[i];
+            const distSq = (lastCollectedWp.latitude - pt[0]) ** 2 + (lastCollectedWp.longitude - pt[1]) ** 2;
+            if (distSq < minPrevDist) {
+              minPrevDist = distSq;
+              prevWpGeomIdx = i;
+            }
+          }
+        }
+
+        // Find the index of the closest point in the road route geometry (search only from prevWpGeomIdx)
+        let closestIdx = prevWpGeomIdx;
+        let minGeomDist = Infinity;
+        if (route.geometry && route.geometry.length > 0) {
+          for (let i = prevWpGeomIdx; i < route.geometry.length; i++) {
+            const pt = route.geometry[i];
+            const distSq = (vehicle.latitude - pt[0]) ** 2 + (vehicle.longitude - pt[1]) ** 2;
+            if (distSq < minGeomDist) {
+              minGeomDist = distSq;
+              closestIdx = i;
+            }
+          }
+        }
+
+        if (distance > ARRIVAL_THRESHOLD) {
+          if (route.geometry && route.geometry.length > 0) {
+            // Find the index in geometry closest to nextWp
+            let nextWpGeomIdx = 0;
+            let minWpDist = Infinity;
+            for (let i = 0; i < route.geometry.length; i++) {
+              const pt = route.geometry[i];
+              const distSq = (nextWp.latitude - pt[0]) ** 2 + (nextWp.longitude - pt[1]) ** 2;
+              if (distSq < minWpDist) {
+                minWpDist = distSq;
+                nextWpGeomIdx = i;
+              }
+            }
+
+            const nearestGeomPoint = route.geometry[closestIdx];
+            const gapDx = nearestGeomPoint[0] - vehicle.latitude;
+            const gapDy = nearestGeomPoint[1] - vehicle.longitude;
+            const gapDistance = Math.sqrt(gapDx * gapDx + gapDy * gapDy);
+
+            if (gapDistance > 0.0012) {
+              // If the vehicle is still off the road geometry, move faster toward the nearest road point.
+              vehicle.latitude += gapDx * 0.5;
+              vehicle.longitude += gapDy * 0.5;
+            } else {
+              // Move along geometry towards nextWpGeomIdx
+              if (closestIdx === nextWpGeomIdx) {
+                // Snap directly to nextWp coords to trigger collection on next tick
+                vehicle.latitude = nextWp.latitude;
+                vehicle.longitude = nextWp.longitude;
+              } else {
+                let nextStepIdx;
+                if (closestIdx < nextWpGeomIdx) {
+                  nextStepIdx = Math.min(nextWpGeomIdx, closestIdx + 4);
+                } else {
+                  nextStepIdx = Math.max(nextWpGeomIdx, closestIdx - 4);
+                }
+                const nextStepCoord = route.geometry[nextStepIdx];
+                vehicle.latitude = nextStepCoord[0];
+                vehicle.longitude = nextStepCoord[1];
+              }
+            }
+          } else {
+            // Fallback to straight line linear interpolation
+            vehicle.latitude += dx * 0.55;
+            vehicle.longitude += dy * 0.55;
+          }
+          await vehicle.save();
+
+          // Emit position update to all clients
+          io.emit('vehicles:updated', [vehicle]);
+        } else {
+          // ── Arrived at the bin — auto-collect ──
+          vehicle.latitude = nextWp.latitude;
+          vehicle.longitude = nextWp.longitude;
+
+          // Mark waypoint as collected
+          nextWp.collected = true;
+          nextWp.collectedAt = new Date();
+
+          // Reset the actual Bin in database
+          const bin = await Bin.findById(nextWp.binId);
+          let wasteWeightCollected = 0;
+          if (bin) {
+            wasteWeightCollected = Math.round(bin.capacity * (bin.fillLevel / 100) * 0.15);
+            bin.fillLevel = 0;
+            bin.status = 'Empty';
+            bin.lastCollectedAt = new Date();
+            await bin.save();
+            io.emit('bins:updated', [bin]);
+            console.log(`🗑️  Auto-collected ${bin.binId} (${nextWp.locationName})`);
+          }
+
+          // Update vehicle load & fuel
+          vehicle.currentLoad = Math.min(vehicle.capacity, vehicle.currentLoad + wasteWeightCollected);
+          vehicle.fuelLevel = Math.max(10, vehicle.fuelLevel - 2);
+          await vehicle.save();
+          io.emit('vehicles:updated', [vehicle]);
+
+          // Update route status
+          if (route.status === 'Pending') {
+            route.status = 'In Progress';
+            route.startedAt = new Date();
+          }
+
+          // ── Check if ALL waypoints are now collected ──
+          const allCollected = route.waypoints.every(wp => wp.collected);
+          if (allCollected) {
+            const driverName = vehicle.driver?.name || 'Driver';
+            const binCount = route.waypoints.length;
+
+            if (route.dumpGeometry && route.dumpGeometry.length > 0) {
+              route.status = 'Dumping';
+              route.dumpStartedAt = new Date();
+
+              io.emit('notification:admin', {
+                title: '🎉 Pickups Completed!',
+                message: `All ${binCount} bins collected by ${driverName}. Vehicle ${vehicle.vehicleNumber} is heading to the dump yard.`,
+                type: 'success',
+                timestamp: new Date().toISOString()
+              });
+
+              console.log(`🚛 Pickups completed for route "${route.routeName}" by ${driverName}. Heading to dump yard.`);
+            } else {
+              route.status = 'Completed';
+              route.completedAt = new Date();
+
+              // Return vehicle to idle
+              vehicle.status = 'Idle';
+              vehicle.currentLoad = 0;
+              await vehicle.save();
+              io.emit('vehicles:updated', [vehicle]);
+
+              // ── Fire notification events ──
+              io.emit('notification:admin', {
+                title: '🎉 Route Completed!',
+                message: `All ${binCount} bins collected by ${driverName}. Vehicle ${vehicle.vehicleNumber} returned to idle.`,
+                type: 'success',
+                timestamp: new Date().toISOString()
+              });
+
+              io.emit('notification:citizen', {
+                title: '✅ Bins Cleaned Up!',
+                message: `Good news! ${binCount} waste bins in your area have been cleaned. Thank you for keeping the city clean!`,
+                type: 'success',
+                timestamp: new Date().toISOString()
+              });
+
+              console.log(`✅ Route "${route.routeName}" completed by ${driverName}`);
+            }
+          }
+
+          await route.save();
+
+          // Emit updated route to all clients
+          const populatedRoute = await Route.findById(route._id)
+            .populate('vehicle')
+            .populate('driver');
+          io.emit('routes:updated', [populatedRoute]);
+        }
       }
     } catch (error) {
       console.error('Error during vehicle simulation:', error.message);
     }
-  }, 5000); // Every 5 seconds
+  }, 700); // Every 0.7 seconds for much faster movement
 };
 
 // Initialize server

@@ -56,6 +56,27 @@ export const optimizeRoute = async (req, res) => {
       return res.status(400).json({ message: 'Vehicle must have an assigned driver to optimize routes' });
     }
 
+    // Cancel/complete any existing active routes for this vehicle to prevent concurrent active routes
+    const existingActiveRoutes = await Route.find({
+      vehicle: vehicle._id,
+      status: { $in: ['Pending', 'In Progress', 'Dumping'] }
+    });
+
+    if (existingActiveRoutes.length > 0) {
+      await Route.updateMany(
+        { _id: { $in: existingActiveRoutes.map(r => r._id) } },
+        { $set: { status: 'Completed', completedAt: new Date() } }
+      );
+
+      // Emit the completed routes update to all clients
+      if (req.io) {
+        const completedRoutes = await Route.find({ _id: { $in: existingActiveRoutes.map(r => r._id) } })
+          .populate('vehicle')
+          .populate('driver');
+        req.io.emit('routes:updated', completedRoutes);
+      }
+    }
+
     // Find all bins with fill level >= 75% or status 'Overflowing'
     const fullBins = await Bin.find({
       $or: [{ fillLevel: { $gte: 75 } }, { status: 'Overflowing' }],
@@ -100,18 +121,108 @@ export const optimizeRoute = async (req, res) => {
       unvisited.splice(nearestIndex, 1);
     }
 
-    // Add return distance to start location (depot/vehicle start point)
-    totalDistance += calculateDistance(currentLat, currentLng, vehicle.latitude, vehicle.longitude);
+    // Query OSRM to get real road coordinates, distance, and duration
+    let geometry = [];
+    let distance = Math.round(totalDistance * 100) / 100;
+    let duration = Math.round(totalDistance * 5 + waypoints.length * 10);
 
-    // Approximate duration: 5 minutes per km + 10 minutes average collection time per bin
-    const duration = Math.round(totalDistance * 5 + waypoints.length * 10);
+    const points = [
+      [vehicle.longitude, vehicle.latitude],
+      ...waypoints.map(w => [w.longitude, w.latitude]),
+      [vehicle.longitude, vehicle.latitude]
+    ];
+    const coordString = points.map(p => `${p[0]},${p[1]}`).join(';');
+
+    const osrmEndpoints = [
+      'https://router.project-osrm.org/route/v1/driving/',
+      'https://routing.openstreetmap.de/routed-car/route/v1/driving/'
+    ];
+
+    const fetchRoadGeometry = async (baseUrl) => {
+      const osrmUrl = `${baseUrl}${coordString}?overview=full&geometries=geojson`;
+      const response = await fetch(osrmUrl);
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data.routes || !data.routes[0] || data.code !== 'Ok') return null;
+      if (!data.routes[0].geometry?.coordinates?.length) return null;
+      return {
+        geometry: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
+        distance: Math.round((data.routes[0].distance / 1000) * 100) / 100,
+        duration: Math.round(data.routes[0].duration / 60 + waypoints.length * 10)
+      };
+    };
+
+    for (const endpoint of osrmEndpoints) {
+      try {
+        const osrmResult = await fetchRoadGeometry(endpoint);
+        if (osrmResult) {
+          geometry = osrmResult.geometry;
+          distance = osrmResult.distance;
+          duration = osrmResult.duration;
+          console.log(`OSRM routing successful using ${endpoint}: ${geometry.length} points, ${distance} km, ${duration} min`);
+          break;
+        }
+      } catch (osrmError) {
+        console.warn(`OSRM routing request failed for ${endpoint}:`, osrmError.message);
+      }
+    }
+
+    if (geometry.length === 0) {
+      console.warn('No road geometry could be retrieved from OSRM; falling back to straight-line route geometry.');
+    }
+
+    // Fallback to straight lines if OSRM is unreachable or fails
+    if (geometry.length === 0) {
+      geometry.push([vehicle.latitude, vehicle.longitude]);
+      waypoints.forEach(w => geometry.push([w.latitude, w.longitude]));
+    }
+
+    const dumpYard = {
+      latitude: 30.7485,
+      longitude: 76.7623,
+      name: 'Municipal Dump Yard',
+    };
+
+    let dumpGeometry = [];
+    const lastWaypoint = waypoints[waypoints.length - 1];
+    if (lastWaypoint) {
+      const dumpPoints = [
+        [lastWaypoint.longitude, lastWaypoint.latitude],
+        [dumpYard.longitude, dumpYard.latitude]
+      ];
+      const dumpCoordString = dumpPoints.map(p => `${p[0]},${p[1]}`).join(';');
+
+      for (const endpoint of osrmEndpoints) {
+        try {
+          const response = await fetch(`${endpoint}${dumpCoordString}?overview=full&geometries=geojson`);
+          if (!response.ok) continue;
+          const data = await response.json();
+          if (!data.routes || !data.routes[0] || data.code !== 'Ok') continue;
+          if (!data.routes[0].geometry?.coordinates?.length) continue;
+          dumpGeometry = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+          break;
+        } catch (err) {
+          console.warn(`OSRM dump yard routing failed for ${endpoint}:`, err.message);
+        }
+      }
+
+      if (dumpGeometry.length === 0) {
+        dumpGeometry = [
+          [lastWaypoint.latitude, lastWaypoint.longitude],
+          [dumpYard.latitude, dumpYard.longitude]
+        ];
+      }
+    }
 
     const route = new Route({
       routeName: `Optimize Route - ${new Date().toLocaleDateString()} (${waypoints.length} Bins)`,
       vehicle: vehicle._id,
       driver: vehicle.driver._id,
       waypoints,
-      distance: Math.round(totalDistance * 100) / 100, // round to 2 decimals
+      geometry,
+      dumpGeometry,
+      dumpYard,
+      distance,
       duration,
       status: 'Pending',
     });

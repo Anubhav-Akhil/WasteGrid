@@ -14,6 +14,7 @@ export const AppProvider = ({ children }) => {
   const [routes, setRoutes] = useState([]);
   const [reports, setReports] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [notifications, setNotifications] = useState([]);
 
   const [loading, setLoading] = useState({
     bins: false,
@@ -107,6 +108,16 @@ export const AppProvider = ({ children }) => {
           });
           return newReports;
         });
+      });
+
+      // Handle admin notifications (route completed, etc.)
+      socketRef.current.on('notification:admin', (data) => {
+        setNotifications(prev => [...prev, { ...data, target: 'admin', id: Date.now() }]);
+      });
+
+      // Handle citizen notifications (bins cleaned, etc.)
+      socketRef.current.on('notification:citizen', (data) => {
+        setNotifications(prev => [...prev, { ...data, target: 'citizen', id: Date.now() }]);
       });
 
       return () => {
@@ -423,6 +434,10 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // Clear a specific notification by id
+  const clearNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
   // Initial Fetches on Auth change
   useEffect(() => {
     fetchBins();
@@ -477,6 +492,8 @@ export const AppProvider = ({ children }) => {
         completeRoute,
         submitReport,
         resolveReport,
+        notifications,
+        clearNotification,
       }}
     >
       {children}
