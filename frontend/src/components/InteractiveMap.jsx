@@ -51,20 +51,25 @@ const ChangeMapView = ({ center, zoom }) => {
 const InvalidateMapSize = () => {
   const map = useMap();
   useEffect(() => {
-    const handleResize = () => {
-      map.invalidateSize();
-    };
+    const container = map.getContainer();
+    if (!container) return;
 
-    // Trigger immediately
+    const resizeObserver = new ResizeObserver(() => {
+      // Use requestAnimationFrame to safely invalidate size after layouts settle
+      requestAnimationFrame(() => {
+        map.invalidateSize();
+      });
+    });
+
+    resizeObserver.observe(container);
+
+    // Initial triggers
     map.invalidateSize();
-
-    // Trigger after layout shifts settle
     const timer1 = setTimeout(() => map.invalidateSize(), 100);
     const timer2 = setTimeout(() => map.invalidateSize(), 500);
 
-    window.addEventListener('resize', handleResize);
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
@@ -629,6 +634,52 @@ const InteractiveMap = ({
             />
           </React.Fragment>
         )}
+
+        {/* Dispatched Citizen Reports paths — green road segments */}
+        {reports
+          .filter(rep => rep.status === 'Dispatched' && rep.geometry && rep.geometry.length > 1)
+          .map(rep => {
+            const reportVehicle = vehicles.find(v => v._id === rep.dispatchedVehicle?._id || v._id === rep.dispatchedVehicle);
+            const rVehiclePos = reportVehicle ? [reportVehicle.latitude, reportVehicle.longitude] : null;
+
+            const remainingGeom = (() => {
+              if (!rVehiclePos) return rep.geometry;
+              
+              let closestIdx = 0;
+              let minGeomDist = Infinity;
+              for (let i = 0; i < rep.geometry.length; i++) {
+                const pt = rep.geometry[i];
+                const distSq = (rVehiclePos[0] - pt[0]) ** 2 + (rVehiclePos[1] - pt[1]) ** 2;
+                if (distSq < minGeomDist) {
+                  minGeomDist = distSq;
+                  closestIdx = i;
+                }
+              }
+              return rep.geometry.slice(closestIdx);
+            })();
+
+            if (remainingGeom.length < 2) return null;
+
+            return (
+              <React.Fragment key={`dispatched-report-path-${rep._id}-${zoomKey}-${remainingGeom.length}`}>
+                {/* Outer shadow */}
+                <Polyline
+                  positions={remainingGeom}
+                  pathOptions={{ color: '#064e3b', weight: 8.5, opacity: 0.12, lineCap: 'round', lineJoin: 'round' }}
+                />
+                {/* Border casing */}
+                <Polyline
+                  positions={remainingGeom}
+                  pathOptions={{ color: '#047857', weight: 6.5, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
+                />
+                {/* Core Green Line */}
+                <Polyline
+                  positions={remainingGeom}
+                  pathOptions={{ color: '#10b981', weight: 3.5, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                />
+              </React.Fragment>
+            );
+          })}
 
 
 

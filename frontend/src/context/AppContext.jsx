@@ -415,6 +415,30 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // Dispatch Vehicle to Overflow Report (Admin)
+  const dispatchReport = async (id, vehicleId) => {
+    try {
+      const res = await fetch(`${API_BASE}/reports/overflow/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: 'Dispatched', vehicleId }),
+      });
+      if (res.ok) {
+        const updatedReport = await res.json();
+        setReports((prev) => prev.map((r) => (r._id === id ? updatedReport : r)));
+        fetchAnalytics();
+        fetchVehicles();
+        return updatedReport;
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.message || 'Failed to dispatch vehicle');
+      }
+    } catch (err) {
+      console.error('Error dispatching vehicle:', err);
+      throw err;
+    }
+  };
+
   // Resolve Overflow Report (Admin)
   const resolveReport = async (id) => {
     try {
@@ -427,6 +451,8 @@ export const AppProvider = ({ children }) => {
         const updatedReport = await res.json();
         setReports((prev) => prev.map((r) => (r._id === id ? updatedReport : r)));
         fetchAnalytics();
+        fetchVehicles();
+        fetchBins();
         return updatedReport;
       }
     } catch (err) {
@@ -492,6 +518,7 @@ export const AppProvider = ({ children }) => {
         completeRoute,
         submitReport,
         resolveReport,
+        dispatchReport,
         notifications,
         clearNotification,
       }}

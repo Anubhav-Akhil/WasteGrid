@@ -10,6 +10,15 @@ const overflowReportSchema = new mongoose.Schema({
     type: String, 
     enum: ['Pending', 'Dispatched', 'Resolved'], 
     default: 'Pending' 
+  },
+  dispatchedVehicle: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Vehicle',
+    default: null
+  },
+  geometry: {
+    type: [[Number]],
+    default: []
   }
 }, { timestamps: true });
 

@@ -266,7 +266,105 @@ const startVehicleSimulation = () => {
         status: { $in: ['Pending', 'In Progress', 'Dumping'] }
       });
 
-      if (!route) continue;
+      if (!route) {
+        const dispatchedReport = await OverflowReport.findOne({
+          dispatchedVehicle: vehicle._id,
+          status: 'Dispatched'
+        });
+
+        if (dispatchedReport) {
+          let arrived = false;
+
+          if (dispatchedReport.geometry && dispatchedReport.geometry.length > 1) {
+            let closestIdx = 0;
+            let minGeomDist = Infinity;
+            for (let i = 0; i < dispatchedReport.geometry.length; i++) {
+              const pt = dispatchedReport.geometry[i];
+              const distSq = (vehicle.latitude - pt[0]) ** 2 + (vehicle.longitude - pt[1]) ** 2;
+              if (distSq < minGeomDist) {
+                minGeomDist = distSq;
+                closestIdx = i;
+              }
+            }
+
+            if (closestIdx === dispatchedReport.geometry.length - 1) {
+              arrived = true;
+            } else {
+              // Medium speed: step by 2 coordinates per tick along OSRM path
+              const nextStepIdx = Math.min(dispatchedReport.geometry.length - 1, closestIdx + 2);
+              const nextStepCoord = dispatchedReport.geometry[nextStepIdx];
+              vehicle.latitude = nextStepCoord[0];
+              vehicle.longitude = nextStepCoord[1];
+              await vehicle.save();
+              io.emit('vehicles:updated', [vehicle]);
+            }
+          } else {
+            const dx = dispatchedReport.latitude - vehicle.latitude;
+            const dy = dispatchedReport.longitude - vehicle.longitude;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const ARRIVAL_THRESHOLD = 0.0006;
+
+            if (distance > ARRIVAL_THRESHOLD) {
+              vehicle.latitude += dx * 0.55;
+              vehicle.longitude += dy * 0.55;
+              await vehicle.save();
+              io.emit('vehicles:updated', [vehicle]);
+            } else {
+              arrived = true;
+            }
+          }
+
+          if (arrived) {
+            // Arrived at report site: resolve report
+            vehicle.latitude = dispatchedReport.latitude;
+            vehicle.longitude = dispatchedReport.longitude;
+            vehicle.status = 'Idle';
+            await vehicle.save();
+            io.emit('vehicles:updated', [vehicle]);
+
+            dispatchedReport.status = 'Resolved';
+            await dispatchedReport.save();
+
+            const populatedReport = await OverflowReport.findById(dispatchedReport._id).populate({
+              path: 'dispatchedVehicle',
+              populate: { path: 'driver', select: 'name' }
+            });
+            io.emit('reports:updated', [populatedReport]);
+
+            // Clean up nearest bin if any
+            const nearestBin = await Bin.findOne({
+              latitude: { $gte: dispatchedReport.latitude - 0.005, $lte: dispatchedReport.latitude + 0.005 },
+              longitude: { $gte: dispatchedReport.longitude - 0.005, $lte: dispatchedReport.longitude + 0.005 }
+            });
+
+            if (nearestBin) {
+              nearestBin.fillLevel = 0;
+              nearestBin.status = 'Empty';
+              await nearestBin.save();
+              io.emit('bins:updated', [nearestBin]);
+              console.log(`🗑️  Auto-emptied nearest bin ${nearestBin.binId} due to report resolution`);
+            }
+
+            const driverName = vehicle.driver?.name || 'Driver';
+            io.emit('notification:admin', {
+              title: '🎉 Issue Resolved!',
+              message: `Overflow report at ${dispatchedReport.locationName} resolved by ${driverName} with ${vehicle.vehicleNumber}.`,
+              type: 'success',
+              timestamp: new Date().toISOString()
+            });
+
+            io.emit('notification:citizen', {
+              title: '✅ Overflow Resolved!',
+              message: `The waste overflow reported at ${dispatchedReport.locationName} has been successfully resolved.`,
+              type: 'success',
+              timestamp: new Date().toISOString()
+            });
+
+            console.log(`✅ Auto-resolved overflow report at "${dispatchedReport.locationName}" by ${driverName}`);
+          }
+        }
+        continue;
+      }
 
       // Find the FIRST uncollected waypoint (preserves nearest-neighbor order)
       const nextWp = route.waypoints.find(wp => !wp.collected);

@@ -127,7 +127,12 @@ export const createOverflowReport = async (req, res) => {
 // @access  Private
 export const getOverflowReports = async (req, res) => {
   try {
-    const reports = await OverflowReport.find({}).sort({ createdAt: -1 });
+    const reports = await OverflowReport.find({})
+      .populate({
+        path: 'dispatchedVehicle',
+        populate: { path: 'driver', select: 'name' }
+      })
+      .sort({ createdAt: -1 });
     res.json(reports);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -138,24 +143,123 @@ export const getOverflowReports = async (req, res) => {
 // @route   PUT /api/reports/overflow/:id
 // @access  Private/Admin
 export const updateOverflowReport = async (req, res) => {
-  const { status } = req.body;
+  const { status, vehicleId } = req.body;
 
   try {
     const report = await OverflowReport.findById(req.params.id);
 
-    if (report) {
-      report.status = status;
-      const updatedReport = await report.save();
-      
-      // Emit real-time update
-      if (req.io) {
-        req.io.emit('reports:updated', [updatedReport]);
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    // If status is set to Dispatched:
+    if (status === 'Dispatched') {
+      if (!vehicleId) {
+        return res.status(400).json({ message: 'Vehicle ID is required for dispatching' });
+      }
+      const vehicle = await Vehicle.findById(vehicleId);
+      if (!vehicle) {
+        return res.status(404).json({ message: 'Vehicle not found' });
       }
       
-      res.json(updatedReport);
-    } else {
-      res.status(404).json({ message: 'Report not found' });
+      vehicle.status = 'Active';
+      await vehicle.save();
+      
+      // Fetch OSRM routing geometry
+      let geometry = [];
+      const osrmEndpoints = [
+        'https://router.project-osrm.org/route/v1/driving/',
+        'https://routing.openstreetmap.de/routed-car/route/v1/driving/'
+      ];
+      const coordString = `${vehicle.longitude},${vehicle.latitude};${report.longitude},${report.latitude}`;
+      
+      const fetchRoadGeometry = async (baseUrl) => {
+        const osrmUrl = `${baseUrl}${coordString}?overview=full&geometries=geojson`;
+        const response = await fetch(osrmUrl);
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (!data.routes || !data.routes[0] || data.code !== 'Ok') return null;
+        if (!data.routes[0].geometry?.coordinates?.length) return null;
+        return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      };
+
+      for (const endpoint of osrmEndpoints) {
+        try {
+          const osrmResult = await fetchRoadGeometry(endpoint);
+          if (osrmResult) {
+            geometry = osrmResult;
+            console.log(`OSRM report routing successful: ${geometry.length} points`);
+            break;
+          }
+        } catch (osrmError) {
+          console.warn(`OSRM report routing failed for ${endpoint}:`, osrmError.message);
+        }
+      }
+
+      // Fallback to straight line
+      if (geometry.length === 0) {
+        geometry = [
+          [vehicle.latitude, vehicle.longitude],
+          [report.latitude, report.longitude]
+        ];
+      }
+
+      report.status = 'Dispatched';
+      report.dispatchedVehicle = vehicleId;
+      report.geometry = geometry;
+      
+      if (req.io) {
+        req.io.emit('vehicles:updated', [vehicle]);
+      }
     }
+
+    // If status is set to Resolved:
+    if (status === 'Resolved') {
+      if (report.dispatchedVehicle) {
+        const vehicle = await Vehicle.findById(report.dispatchedVehicle);
+        if (vehicle) {
+          vehicle.status = 'Idle';
+          await vehicle.save();
+          
+          if (req.io) {
+            req.io.emit('vehicles:updated', [vehicle]);
+          }
+        }
+      }
+
+      // Also reset the nearest bin (if any) to 0% fill level
+      const nearestBin = await Bin.findOne({
+        latitude: { $gte: report.latitude - 0.005, $lte: report.latitude + 0.005 },
+        longitude: { $gte: report.longitude - 0.005, $lte: report.longitude + 0.005 }
+      });
+
+      if (nearestBin) {
+        nearestBin.fillLevel = 0;
+        nearestBin.status = 'Empty';
+        await nearestBin.save();
+
+        if (req.io) {
+          req.io.emit('bins:updated', [nearestBin]);
+        }
+      }
+
+      report.status = 'Resolved';
+    }
+
+    const updatedReport = await report.save();
+    
+    // Populate before returning and emitting so frontend has vehicle details
+    const populatedReport = await OverflowReport.findById(updatedReport._id).populate({
+      path: 'dispatchedVehicle',
+      populate: { path: 'driver', select: 'name' }
+    });
+
+    // Emit real-time update
+    if (req.io) {
+      req.io.emit('reports:updated', [populatedReport]);
+    }
+    
+    res.json(populatedReport);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

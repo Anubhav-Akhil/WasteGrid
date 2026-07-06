@@ -75,7 +75,7 @@ const AdminDashboard = () => {
     bins, vehicles, routes, reports, analytics, loading,
     fetchBins, fetchVehicles, fetchRoutes, fetchReports, fetchAnalytics,
     createBin, deleteBin, updateBin, createVehicle, deleteVehicle,
-    optimizeRoute, resolveReport, notifications, clearNotification,
+    optimizeRoute, resolveReport, dispatchReport, notifications, clearNotification,
   } = useApp();
 
   // Listen for admin notifications
@@ -99,6 +99,9 @@ const AdminDashboard = () => {
   const [activeRouteView, setActiveRouteView] = useState(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(new Date());
+  const [dispatchingReportId, setDispatchingReportId] = useState(null);
+  const [dispatchVehicleId, setDispatchVehicleId] = useState('');
+  const [dispatchingState, setDispatchingState] = useState(false);
 
   const [binForm, setBinForm] = useState({ binId: '', locationName: '', latitude: 30.7333, longitude: 76.7794, capacity: 120, wasteType: 'Organic' });
   const [vehicleForm, setVehicleForm] = useState({ vehicleNumber: '', driverId: '', capacity: 1000 });
@@ -303,6 +306,24 @@ const AdminDashboard = () => {
   const handleResolve = async (id) => {
     await resolveReport(id);
     toast.success('Report marked as resolved.', 'Resolved');
+  };
+
+  const handleDispatchSubmit = async (reportId) => {
+    if (!dispatchVehicleId) {
+      toast.error('Please select a vehicle to dispatch.', 'Error');
+      return;
+    }
+    setDispatchingState(true);
+    try {
+      await dispatchReport(reportId, dispatchVehicleId);
+      toast.success('Truck dispatched for survey and resolving.', 'Dispatched');
+      setDispatchingReportId(null);
+      setDispatchVehicleId('');
+    } catch (err) {
+      toast.error(err.message || 'Failed to dispatch truck.', 'Error');
+    } finally {
+      setDispatchingState(false);
+    }
   };
 
   const simulateFill = async (bin) => {
@@ -798,11 +819,77 @@ const AdminDashboard = () => {
                             Reported by <strong>{rep.reportedBy}</strong> • {new Date(rep.createdAt).toLocaleString()}
                           </p>
                         </div>
-                        {rep.status === 'Pending' && (
-                          <button onClick={() => handleResolve(rep._id)} className="btn btn-primary btn-xs" style={{ marginLeft: '0.75rem', flexShrink: 0 }}>
-                            <CheckCircle size={12} /> Resolve Alert
-                          </button>
-                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end', marginLeft: '0.75rem', flexShrink: 0 }}>
+                          {rep.status === 'Pending' && (
+                            <>
+                              {dispatchingReportId === rep._id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', background: '#f8fafc', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)', width: '220px' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Select Idle Truck:</span>
+                                  <select 
+                                    className="form-select" 
+                                    style={{ fontSize: '0.75rem', padding: '0.25rem' }}
+                                    value={dispatchVehicleId}
+                                    onChange={e => setDispatchVehicleId(e.target.value)}
+                                  >
+                                    <option value="">Choose truck…</option>
+                                    {vehicles.filter(v => v.status === 'Idle').map(v => (
+                                      <option key={v._id} value={v._id}>
+                                        {v.vehicleNumber} ({v.driver?.name || 'No driver'})
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
+                                    <button 
+                                      disabled={dispatchingState || !dispatchVehicleId} 
+                                      onClick={() => handleDispatchSubmit(rep._id)} 
+                                      className="btn btn-primary btn-xs"
+                                      style={{ flex: 1 }}
+                                    >
+                                      Confirm
+                                    </button>
+                                    <button 
+                                      disabled={dispatchingState} 
+                                      onClick={() => { setDispatchingReportId(null); setDispatchVehicleId(''); }} 
+                                      className="btn btn-secondary btn-xs"
+                                      style={{ flex: 1 }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                  <button onClick={() => { setDispatchingReportId(rep._id); setDispatchVehicleId(''); }} className="btn btn-primary btn-xs">
+                                    <Truck size={12} style={{ marginRight: '4px' }} /> Dispatch Truck
+                                  </button>
+                                  <button onClick={() => handleResolve(rep._id)} className="btn btn-secondary btn-xs">
+                                    Resolve Directly
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {rep.status === 'Dispatched' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#854d0e', background: '#fef9c3', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+                                🚚 {rep.dispatchedVehicle?.vehicleNumber || 'Vehicle'} ({rep.dispatchedVehicle?.driver?.name || 'No driver'})
+                              </span>
+                              <button onClick={() => handleResolve(rep._id)} className="btn btn-success btn-xs" style={{ background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <CheckCircle size={12} /> Complete & Resolve
+                              </button>
+                            </div>
+                          )}
+                          {rep.status === 'Resolved' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'flex-end' }}>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                {rep.dispatchedVehicle ? `Resolved by ${rep.dispatchedVehicle.vehicleNumber}` : 'Resolved Directly'}
+                              </span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                {rep.updatedAt && `on ${new Date(rep.updatedAt).toLocaleDateString()}`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
